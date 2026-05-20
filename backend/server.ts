@@ -315,6 +315,22 @@ async function deleteHotelFromDb(id: string) {
   }
 }
 
+async function initDb() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS hotels (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL
+      )
+    `);
+    console.log("PostgreSQL table 'hotels' verified or created.");
+    await loadDatabase();
+  } catch (err) {
+    console.error("Failed to initialize database:", err);
+    throw err;
+  }
+}
+
 async function loadDatabase() {
   try {
     const res = await pool.query("SELECT data FROM hotels");
