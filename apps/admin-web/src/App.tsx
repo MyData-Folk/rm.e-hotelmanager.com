@@ -95,6 +95,7 @@ export default function App() {
   const [searchGridRoom, setSearchGridRoom] = useState<string>('Double Classique');
   const [selectedGridPlan, setSelectedGridPlan] = useState<string>('OTA-RO-FLEX');
   const [gridMode, setGridMode] = useState<'rates' | 'inventory'>('rates');
+  const [inventoryView, setInventoryView] = useState<'grid' | 'heatmap'>('heatmap');
   const [globalInventoryUpdates, setGlobalInventoryUpdates] = useState<{ [key: string]: string }>({});
   const [savingGlobalInventory, setSavingGlobalInventory] = useState<boolean>(false);
   const [showConfirmClear, setShowConfirmClear] = useState<boolean>(false);
@@ -104,6 +105,7 @@ export default function App() {
   const [editingPartners, setEditingPartners] = useState<{ [name: string]: PartnerConfig }>({});
   const [editingRules, setEditingRules] = useState<PlanRule[]>([]);
   const [editingRooms, setEditingRooms] = useState<string[]>([]);
+  const [editingRoomCapacity, setEditingRoomCapacity] = useState<{ [roomType: string]: number }>({});
   const [newRoomInput, setNewRoomInput] = useState<string>('');
   const [savingConfig, setSavingConfig] = useState<boolean>(false);
 
@@ -209,6 +211,7 @@ export default function App() {
       setEditingPartners(JSON.parse(JSON.stringify(data.partners)));
       setEditingRules(JSON.parse(JSON.stringify(data.rules)));
       setEditingRooms(JSON.parse(JSON.stringify(data.rooms)));
+      setEditingRoomCapacity(JSON.parse(JSON.stringify(data.roomCapacity || {})));
 
       // Initialize reference edits values matching original DB price and leftForSale
       const editTracker: { [date: string]: { price: string; inventory: string } } = {};
@@ -463,7 +466,8 @@ export default function App() {
         body: JSON.stringify({
           partners: editingPartners,
           rules: editingRules,
-          rooms: editingRooms
+          rooms: editingRooms,
+          roomCapacity: editingRoomCapacity
         })
       });
 
@@ -1650,12 +1654,39 @@ export default function App() {
                           Gestionnaire Global des Disponibilités par Type de Chambre et par Date
                         </h3>
                         <p className="text-xs text-slate-500">
-                          Saisissez directement l'inventaire restant (L.F.S) ou appliquez <strong>STOP</strong> pour suspendre les ventes (Plan : <strong>OTA-RO-FLEX</strong>).
+                          {inventoryView === 'heatmap' 
+                            ? "Visualisez le taux de disponibilité restante sous forme de Heatmap croisée et colorée."
+                            : "Saisissez directement l'inventaire restant (L.F.S) ou appliquez STOP pour suspendre les ventes."
+                          }
                         </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3">
-                        {Object.keys(globalInventoryUpdates).length > 0 && (
+                        {/* Toggle Heatmap vs Direct Input */}
+                        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                          <button
+                            onClick={() => setInventoryView('heatmap')}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all text-center cursor-pointer ${
+                              inventoryView === 'heatmap'
+                                ? 'bg-white text-blue-700 shadow-xs border border-blue-100/50'
+                                : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            🗺️ Heatmap Taux
+                          </button>
+                          <button
+                            onClick={() => setInventoryView('grid')}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all text-center cursor-pointer ${
+                              inventoryView === 'grid'
+                                ? 'bg-white text-slate-800 shadow-xs'
+                                : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            ✏️ Saisie Directe
+                          </button>
+                        </div>
+
+                        {inventoryView === 'grid' && Object.keys(globalInventoryUpdates).length > 0 && (
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
                               Modifications non enregistrées : {Object.keys(globalInventoryUpdates).length}
@@ -1669,115 +1700,187 @@ export default function App() {
                           </div>
                         )}
                         
-                        <button
-                          onClick={handleSaveGlobalInventory}
-                          disabled={savingGlobalInventory || Object.keys(globalInventoryUpdates).length === 0}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-                        >
-                          {savingGlobalInventory ? (
-                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Save className="h-3.5 w-3.5" />
-                          )}
-                          Sauvegarder l'inventaire global ({Object.keys(globalInventoryUpdates).length})
-                        </button>
+                        {inventoryView === 'grid' && (
+                          <button
+                            onClick={handleSaveGlobalInventory}
+                            disabled={savingGlobalInventory || Object.keys(globalInventoryUpdates).length === 0}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                          >
+                            {savingGlobalInventory ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Save className="h-3.5 w-3.5" />
+                            )}
+                            Sauvegarder l'inventaire global ({Object.keys(globalInventoryUpdates).length})
+                          </button>
+                        )}
                       </div>
                     </div>
 
                     <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                       <div className="overflow-x-auto">
-                        <table className="w-full border-collapse text-left text-xs text-slate-800">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-205 text-[10px] text-slate-500 uppercase tracking-wider font-bold">
-                              <th className="py-3 px-4 font-bold text-slate-700 min-w-[240px] sticky left-0 bg-slate-50 z-10 border-r border-slate-200/60 shadow-[2px_0_5px_rgba(0,0,0,0.03)]">
-                                Type de Chambre / Date
-                              </th>
-                              {uniqueHotelDates.map((date) => (
-                                <th key={date} className="py-3 px-3 text-center min-w-[100px] border-r border-slate-200/40">
-                                  {date}
+                        {inventoryView === 'heatmap' ? (
+                          /* HEATMAP: DATES VERTICAL, ROOM TYPES HORIZONTAL */
+                          <table className="w-full border-collapse text-left text-xs text-slate-800">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-205 text-[10px] text-slate-500 uppercase tracking-wider font-bold">
+                                <th className="py-3 px-4 font-bold text-slate-700 min-w-[150px] sticky left-0 bg-slate-50 z-10 border-r border-slate-200/60 shadow-[2px_0_5px_rgba(0,0,0,0.03)]">
+                                  Date
                                 </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-150">
-                            {activeHotel?.rooms.map((roomType) => (
-                              <tr key={roomType} className="hover:bg-slate-50 transition-colors group">
-                                <td className="py-3 px-4 font-semibold text-slate-800 sticky left-0 bg-white z-10 border-r border-slate-200/60 shadow-[2px_0_5px_rgba(0,0,0,0.03)] group-hover:bg-slate-50">
-                                  {roomType}
-                                </td>
-
-                                {uniqueHotelDates.map((date) => {
-                                  const key = `${roomType}|${date}`;
-                                  const originalMatch = activeHotel.rates.find(
-                                    (r) => r.roomType === roomType && r.date === date && r.planCode === "OTA-RO-FLEX"
-                                  );
-                                  const originalValue = originalMatch ? originalMatch.leftForSale : "5";
-                                  
-                                  const isModified = globalInventoryUpdates[key] !== undefined;
-                                  const cellValue = isModified ? globalInventoryUpdates[key] : originalValue;
-
-                                  const isStop = String(cellValue).trim().toUpperCase() === "STOP" || cellValue === "0";
-                                  const isLow = cellValue === "1" || cellValue === "2";
-                                  
-                                  let cellBg = "bg-emerald-50/70 border-emerald-200 text-emerald-800";
-                                  if (isStop) {
-                                    cellBg = "bg-rose-50 border-rose-200 text-rose-700 font-extrabold";
-                                  } else if (isLow) {
-                                    cellBg = "bg-amber-50 border-amber-200 text-amber-800";
-                                  }
-
+                                {activeHotel?.rooms.map((roomType) => {
+                                  const capacity = activeHotel.roomCapacity?.[roomType] || 10;
                                   return (
-                                    <td key={date} className={`py-2.5 px-3 text-center border-r border-slate-200/40 ${isModified ? 'bg-amber-50/20' : ''}`}>
-                                      <div className="flex flex-col items-center justify-center gap-1">
-                                        <input
-                                          type="text"
-                                          value={cellValue}
-                                          onChange={(e) => {
-                                            const nextVal = e.target.value;
-                                            if (nextVal === originalValue) {
-                                              const updated = { ...globalInventoryUpdates };
-                                              delete updated[key];
-                                              setGlobalInventoryUpdates(updated);
-                                            } else {
-                                              setGlobalInventoryUpdates({
-                                                ...globalInventoryUpdates,
-                                                [key]: nextVal
-                                              });
-                                            }
-                                          }}
-                                          className={`w-16 p-1 text-center font-mono text-xs font-bold rounded-lg border focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all ${cellBg}`}
-                                        />
-                                        
-                                        <button
-                                          onClick={() => {
-                                            const nextVal = isStop ? "5" : "STOP";
-                                            if (nextVal === originalValue) {
-                                              const updated = { ...globalInventoryUpdates };
-                                              delete updated[key];
-                                              setGlobalInventoryUpdates(updated);
-                                            } else {
-                                              setGlobalInventoryUpdates({
-                                                ...globalInventoryUpdates,
-                                                [key]: nextVal
-                                              });
-                                            }
-                                          }}
-                                          className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
-                                            isStop 
-                                              ? "bg-slate-200 text-slate-700 hover:bg-slate-300" 
-                                              : "bg-rose-100 hover:bg-rose-200 text-rose-750"
-                                          }`}
-                                        >
-                                          {isStop ? "Vendre" : "STOP"}
-                                        </button>
-                                      </div>
-                                    </td>
+                                    <th key={roomType} className="py-3 px-3 text-center min-w-[160px] border-r border-slate-200/40">
+                                      <span className="block font-bold text-slate-700">{roomType}</span>
+                                      <span className="block text-[9px] font-medium text-slate-400 normal-case">Capacité: {capacity} ch.</span>
+                                    </th>
                                   );
                                 })}
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150">
+                              {uniqueHotelDates.map((date) => (
+                                <tr key={date} className="hover:bg-slate-50 transition-colors">
+                                  <td className="py-3 px-4 font-semibold text-slate-800 sticky left-0 bg-white z-10 border-r border-slate-200/60 shadow-[2px_0_5px_rgba(0,0,0,0.03)]">
+                                    {date}
+                                  </td>
+                                  {activeHotel?.rooms.map((roomType) => {
+                                    const originalMatch = activeHotel.rates.find(
+                                      (r) => r.roomType === roomType && r.date === date && r.planCode === "OTA-RO-FLEX"
+                                    );
+                                    const cellValue = originalMatch ? originalMatch.leftForSale : "5";
+                                    const capacity = activeHotel.roomCapacity?.[roomType] || 10;
+                                    
+                                    const isStop = String(cellValue).trim().toUpperCase() === "STOP" || cellValue === "X" || cellValue === "0";
+                                    const numVal = isStop ? 0 : parseInt(cellValue) || 0;
+                                    const rate = capacity > 0 ? Math.min(numVal / capacity, 1) : (numVal > 0 ? 1 : 0);
+                                    
+                                    const availColor = (rateVal: number) => {
+                                      const r = Math.round(252 - rateVal * (252 - 134)); // 252→134
+                                      const g = Math.round(165 + rateVal * (239 - 165)); // 165→239
+                                      const b = Math.round(165 - rateVal * (165 - 172)); // stable ~170
+                                      return `rgb(${r},${g},${b})`;
+                                    };
+
+                                    const bgStyle = isStop ? "rgb(252, 165, 165)" : availColor(rate);
+                                    const textStyle = isStop ? "text-rose-950 font-bold" : "text-slate-900 font-semibold";
+                                    
+                                    return (
+                                      <td 
+                                        key={roomType} 
+                                        className="py-3 px-3 text-center border-r border-slate-200/40 font-mono transition-all animate-fade-in"
+                                        style={{ backgroundColor: bgStyle }}
+                                      >
+                                        <div className="flex flex-col items-center justify-center gap-0.5">
+                                          <span className={`text-xs ${textStyle}`}>
+                                            {isStop ? "STOP" : `${Math.round(rate * 100)}%`}
+                                          </span>
+                                          <span className="text-[9px] text-slate-650 font-medium">
+                                            {isStop ? "Ventes fermées" : `${cellValue} / ${capacity} dispo`}
+                                          </span>
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          /* ORIGINAL DIRECT EDITABLE INVENTORY MATRIX */
+                          <table className="w-full border-collapse text-left text-xs text-slate-800">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-205 text-[10px] text-slate-500 uppercase tracking-wider font-bold">
+                                <th className="py-3 px-4 font-bold text-slate-700 min-w-[240px] sticky left-0 bg-slate-50 z-10 border-r border-slate-200/60 shadow-[2px_0_5px_rgba(0,0,0,0.03)]">
+                                  Type de Chambre / Date
+                                </th>
+                                {uniqueHotelDates.map((date) => (
+                                  <th key={date} className="py-3 px-3 text-center min-w-[100px] border-r border-slate-200/40">
+                                    {date}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150">
+                              {activeHotel?.rooms.map((roomType) => (
+                                <tr key={roomType} className="hover:bg-slate-50 transition-colors group">
+                                  <td className="py-3 px-4 font-semibold text-slate-800 sticky left-0 bg-white z-10 border-r border-slate-200/60 shadow-[2px_0_5px_rgba(0,0,0,0.03)] group-hover:bg-slate-50">
+                                    {roomType}
+                                  </td>
+
+                                  {uniqueHotelDates.map((date) => {
+                                    const key = `${roomType}|${date}`;
+                                    const originalMatch = activeHotel.rates.find(
+                                      (r) => r.roomType === roomType && r.date === date && r.planCode === "OTA-RO-FLEX"
+                                    );
+                                    const originalValue = originalMatch ? originalMatch.leftForSale : "5";
+                                    
+                                    const isModified = globalInventoryUpdates[key] !== undefined;
+                                    const cellValue = isModified ? globalInventoryUpdates[key] : originalValue;
+
+                                    const isStop = String(cellValue).trim().toUpperCase() === "STOP" || cellValue === "0";
+                                    const isLow = cellValue === "1" || cellValue === "2";
+                                    
+                                    let cellBg = "bg-emerald-50/70 border-emerald-200 text-emerald-800";
+                                    if (isStop) {
+                                      cellBg = "bg-rose-50 border-rose-200 text-rose-700 font-extrabold";
+                                    } else if (isLow) {
+                                      cellBg = "bg-amber-50 border-amber-200 text-amber-800";
+                                    }
+
+                                    return (
+                                      <td key={date} className={`py-2.5 px-3 text-center border-r border-slate-200/40 ${isModified ? 'bg-amber-50/20' : ''}`}>
+                                        <div className="flex flex-col items-center justify-center gap-1">
+                                          <input
+                                            type="text"
+                                            value={cellValue}
+                                            onChange={(e) => {
+                                              const nextVal = e.target.value;
+                                              if (nextVal === originalValue) {
+                                                const updated = { ...globalInventoryUpdates };
+                                                delete updated[key];
+                                                setGlobalInventoryUpdates(updated);
+                                              } else {
+                                                setGlobalInventoryUpdates({
+                                                  ...globalInventoryUpdates,
+                                                  [key]: nextVal
+                                                });
+                                              }
+                                            }}
+                                            className={`w-16 p-1 text-center font-mono text-xs font-bold rounded-lg border focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all ${cellBg}`}
+                                          />
+                                          
+                                          <button
+                                            onClick={() => {
+                                              const nextVal = isStop ? "5" : "STOP";
+                                              if (nextVal === originalValue) {
+                                                const updated = { ...globalInventoryUpdates };
+                                                delete updated[key];
+                                                setGlobalInventoryUpdates(updated);
+                                              } else {
+                                                setGlobalInventoryUpdates({
+                                                  ...globalInventoryUpdates,
+                                                  [key]: nextVal
+                                                });
+                                              }
+                                            }}
+                                            className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-extrabold transition-all cursor-pointer ${
+                                              isStop 
+                                                ? "bg-slate-200 text-slate-700 hover:bg-slate-300" 
+                                                : "bg-rose-100 hover:bg-rose-200 text-rose-750"
+                                            }`}
+                                          >
+                                            {isStop ? "Vendre" : "STOP"}
+                                          </button>
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
                       </div>
 
                       {uniqueHotelDates.length === 0 && (
@@ -1868,6 +1971,39 @@ export default function App() {
                               >
                                 <X className="h-3.5 w-3.5" />
                               </button>
+                            </div>
+                          ))}
+                          {editingRooms.length === 0 && (
+                            <span className="text-slate-400 block text-center py-4 text-[11px]">Aucune chambre paramétrée</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Sub card 1.5: Rooms Capacity setup */}
+                      <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-xl space-y-3">
+                        <span className="text-xs font-bold text-slate-500 uppercase block">Capacités par Catégorie</span>
+                        <p className="text-[10px] text-slate-450">Définissez le nombre total de chambres physiques disponibles pour chaque catégorie de chambre afin de calculer le taux de disponibilité sur les heatmaps.</p>
+                        
+                        <div className="max-h-52 overflow-y-auto space-y-2 bg-white border border-slate-150 p-3 rounded-lg divide-y divide-slate-100">
+                          {editingRooms.map((room) => (
+                            <div key={room} className="flex items-center justify-between py-1.5 text-xs text-slate-705 gap-2">
+                              <span className="font-medium text-slate-700 truncate">{room}</span>
+                              <div className="flex items-center gap-1">
+                                <input 
+                                  type="number"
+                                  min="1"
+                                  value={editingRoomCapacity[room] !== undefined ? editingRoomCapacity[room] : 10}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    setEditingRoomCapacity({
+                                      ...editingRoomCapacity,
+                                      [room]: val
+                                    });
+                                  }}
+                                  className="w-16 p-1 text-center font-mono border border-slate-200 rounded focus:outline-none focus:border-emerald-500 font-bold"
+                                />
+                                <span className="text-[10px] text-slate-400">ch.</span>
+                              </div>
                             </div>
                           ))}
                           {editingRooms.length === 0 && (

@@ -189,6 +189,7 @@ interface Hotel {
   name: string;
   location: string;
   rooms: string[];
+  roomCapacity?: { [roomType: string]: number };
   partners: { [partnerName: string]: PartnerConfig };
   rules: PlanRule[];
   rates: Rate[];
@@ -933,7 +934,8 @@ app.get("/availability", (req, res) => {
     }
   });
 
-  res.json(Array.from(availabilityMap.values()));
+  const roomCapacityMap = hotel.roomCapacity || {};
+  res.json({ items: Array.from(availabilityMap.values()), room_capacity: roomCapacityMap });
 });
 
 // 5. GET /imported-rates
@@ -1089,7 +1091,7 @@ app.get("/api/hotels", (req, res) => {
 
 // 2. CREATE A NEW HOTEL
 app.post("/api/hotels", async (req, res) => {
-  const { name, location, templateHotelId } = req.body;
+  const { name, location, templateHotelId, roomCapacity } = req.body;
   if (!name) {
     return res.status(400).json({ error: "Le nom de l'hôtel est obligatoire" });
   }
@@ -1142,6 +1144,7 @@ app.post("/api/hotels", async (req, res) => {
     name,
     location: location || "France",
     rooms: roomsTemplate,
+    roomCapacity: roomCapacity || (templateHotel ? JSON.parse(JSON.stringify(templateHotel.roomCapacity || {})) : {}),
     partners: partnersTemplate,
     rules: rulesTemplate,
     rates: ratesTemplate
@@ -1165,7 +1168,7 @@ app.get("/api/hotels/:id", (req, res) => {
 
 // 4. PUT CONFIGURATION OF A HOTEL (PARTNERS & RULES & ROOMS)
 app.put("/api/hotels/:id/config", async (req, res) => {
-  const { name, location, partners, rules, rooms } = req.body;
+  const { name, location, partners, rules, rooms, roomCapacity } = req.body;
   const hotelIndex = hotelsCache.findIndex(h => h.id === req.params.id);
   
   if (hotelIndex === -1) {
@@ -1178,6 +1181,7 @@ app.put("/api/hotels/:id/config", async (req, res) => {
   if (partners) hotel.partners = partners;
   if (rules) hotel.rules = rules;
   if (rooms) hotel.rooms = rooms;
+  if (roomCapacity) hotel.roomCapacity = roomCapacity;
 
   calculateHotelRates(hotel);
   await saveHotelToDb(hotel);

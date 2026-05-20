@@ -148,6 +148,7 @@ export default function App() {
   const [hotels, setHotels] = useState([]);
   const [partners, setPartners] = useState([]);
   const [availability, setAvailability] = useState([]);
+  const [roomCapacity, setRoomCapacity] = useState({});
   const [rates, setRates] = useState([]);
   const [grid, setGrid] = useState(null);
   const [simulation, setSimulation] = useState(null);
@@ -178,14 +179,15 @@ export default function App() {
     [availability, rates, filters.roomName],
   );
 
-  const availablePlans = useMemo(
-    () => unique([
-      ...(partner?.plan_codes || []),
+  const availablePlans = useMemo(() => {
+    if (partner && partner.plan_codes && partner.plan_codes.length > 0) {
+      return partner.plan_codes;
+    }
+    return unique([
       ...rates.map((item) => item.plan_code),
       filters.planCode,
-    ]),
-    [partner, rates, filters.planCode],
-  );
+    ]).filter(Boolean);
+  }, [partner, rates, filters.planCode]);
 
   const dashboardSummary = useMemo(() => {
     const availableCells = availability.filter((item) => item.status === 'available');
@@ -255,7 +257,8 @@ export default function App() {
         apiRequest(`/rates/grid?${gridQuery.toString()}`),
       ]);
 
-      setAvailability(availabilityPayload);
+      setAvailability(availabilityPayload && availabilityPayload.items ? availabilityPayload.items : (availabilityPayload || []));
+      setRoomCapacity(availabilityPayload && availabilityPayload.room_capacity ? availabilityPayload.room_capacity : {});
       setRates(ratesPayload);
       setGrid(gridPayload);
     } catch (error) {
@@ -788,7 +791,15 @@ export default function App() {
                     <label className="block text-[10px] uppercase font-bold text-slate-400">Partenaire Cible</label>
                     <select
                       value={filters.partnerName}
-                      onChange={(e) => updateFilter('partnerName', e.target.value)}
+                      onChange={(e) => {
+                        const pName = e.target.value;
+                        const p = partners.find(pt => pt.name === pName);
+                        setFilters(current => ({
+                          ...current,
+                          partnerName: pName,
+                          planCode: (p && p.plan_codes && p.plan_codes.length > 0) ? p.plan_codes[0] : current.planCode
+                        }));
+                      }}
                       className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer w-64"
                     >
                       {partners.map((p) => (
@@ -921,43 +932,121 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-slate-700">
-                    <thead className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 border-b border-slate-100">
-                      <tr>
-                        <th className="py-2.5 px-3">Date</th>
-                        <th className="py-2.5 px-3">Chambre</th>
-                        <th className="py-2.5 px-3">Statut Actuel</th>
-                        <th className="py-2.5 px-3 w-48">Stock disponible (Éditable)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-sans">
-                      {availability.map((item, idx) => {
-                        const key = `${item.date}|${item.room_name}`;
-                        const isDirty = modifiedAvailability[key] !== undefined;
-                        const val = isDirty ? modifiedAvailability[key] : (item.available_quantity ?? '');
-                        return (
-                          <tr key={`${key}-${idx}`} className="hover:bg-slate-50/50">
-                            <td className="py-3 px-3 font-mono font-semibold text-slate-655">{item.date}</td>
-                            <td className="py-3 px-3 text-slate-800 font-semibold">{item.room_name}</td>
-                            <td className="py-3 px-3"><StatusPill status={item.status} /></td>
-                            <td className="py-2 px-3">
-                              <input
-                                type="text"
-                                value={val}
-                                placeholder="ex: 5 ou STOP"
-                                disabled={loading}
-                                onChange={(e) => updateModifiedAvailability(item.date, item.room_name, e.target.value)}
-                                className={`w-32 bg-slate-50 border rounded-lg px-2.5 py-1.5 text-xs text-slate-750 font-bold focus:outline-none focus:bg-white focus:border-blue-500 font-mono transition-all ${
-                                  isDirty ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-200'
-                                }`}
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-3xs">
+                  {(() => {
+                    const uniqueDates = [...new Set(availability.map(i => i.date))].sort();
+                    const roomCols = availableRooms.length > 0 ? availableRooms : [...new Set(availability.map(i => i.room_name))];
+
+                    const availIndex = {};
+                    availability.forEach(a => { availIndex[`${a.date}|${a.room_name}`] = a; });
+
+                    const availColor = (lfs, capacity) => {
+                      if (lfs === null || lfs === undefined || String(lfs).trim() === '' || String(lfs).trim() === '—') return '#f1f5f9';
+                      const val = String(lfs).trim().toUpperCase();
+                      if (val === 'STOP' || val === '0') return '#fca5a5';
+                      const num = parseInt(val);
+                      if (isNaN(num)) return '#f1f5f9';
+                      const cap = capacity > 0 ? capacity : null;
+                      const ratio = cap ? Math.min(num / cap, 1) : (num > 5 ? 1 : num / 5);
+                      
+                      if (ratio <= 0.5) {
+                        const t = ratio * 2;
+                        const r = Math.round(252 + t * (253 - 252));
+                        const g = Math.round(165 + t * (230 - 165));
+                        const b = Math.round(165 - t * (165 - 138));
+                        return `rgb(${r},${g},${b})`;
+                      } else {
+                        const t = (ratio - 0.5) * 2;
+                        const r = Math.round(253 - t * (253 - 134));
+                        const g = Math.round(230 + t * (239 - 230));
+                        const b = Math.round(138 + t * (172 - 138));
+                        return `rgb(${r},${g},${b})`;
+                      }
+                    };
+
+                    if (uniqueDates.length === 0) {
+                      return <div className="py-12 text-center text-slate-400 text-xs italic">Aucune donnée de disponibilité pour cette période.</div>;
+                    }
+
+                    return (
+                      <div className="space-y-4 bg-white p-1">
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="py-2.5 px-3 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50 z-10 border-r border-slate-200 min-w-[100px]">Date</th>
+                              {roomCols.map(room => (
+                                <th key={room} className="py-2.5 px-2 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider min-w-[100px] border-r border-slate-100">{room}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {uniqueDates.map(date => (
+                              <tr key={date} className="hover:bg-slate-50/30 transition-colors">
+                                <td className="py-2.5 px-3 font-mono font-bold text-slate-650 sticky left-0 bg-white z-10 border-r border-slate-200 text-[11px]">{date}</td>
+                                {roomCols.map(room => {
+                                  const entry = availIndex[`${date}|${room}`];
+                                  const key = `${date}|${room}`;
+                                  const isDirty = modifiedAvailability[key] !== undefined;
+                                  const cap = roomCapacity[room] || 0;
+                                  
+                                  if (!entry) {
+                                    return (
+                                      <td key={room} className="py-2.5 px-2 text-center border-r border-slate-100 bg-slate-50 text-[11px] text-slate-400 italic">
+                                        —
+                                      </td>
+                                    );
+                                  }
+
+                                  const lfs = isDirty ? modifiedAvailability[key] : (entry.available_quantity !== null ? entry.available_quantity : (entry.raw_value ?? ''));
+                                  const bg = availColor(lfs, cap);
+                                  
+                                  const num = parseInt(String(lfs));
+                                  const isStop = String(lfs).toUpperCase() === 'STOP' || num === 0 || entry.status === 'sold_out';
+                                  const textColor = isStop ? '#dc2626' : '#166534';
+
+                                  return (
+                                    <td key={room} className="py-2.5 px-2 text-center border-r border-slate-100 transition-all duration-200" style={{ backgroundColor: bg }}>
+                                      <div className="flex flex-col items-center gap-1.5 py-1">
+                                        <input
+                                          type="text"
+                                          value={lfs}
+                                          disabled={loading}
+                                          onChange={(e) => updateModifiedAvailability(date, room, e.target.value)}
+                                          placeholder="STOP / nb"
+                                          className={`w-16 text-center text-xs font-bold p-1 bg-white/90 border rounded-lg focus:outline-none focus:border-blue-500 focus:bg-white font-mono shadow-3xs transition-all ${
+                                            isDirty ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/50' : 'border-slate-200'
+                                          }`}
+                                          style={{ color: textColor }}
+                                        />
+                                        {cap > 0 && typeof num === 'number' && !isNaN(num) ? (
+                                          <div className="text-[9px] font-bold text-slate-600 flex flex-col items-center leading-none">
+                                            <span>{num}/{cap}</span>
+                                            <span className="text-slate-500 font-medium opacity-80 mt-0.5">{Math.round((num / cap) * 100)}%</span>
+                                          </div>
+                                        ) : cap > 0 ? (
+                                          <div className="text-[9px] font-bold text-slate-400 leading-none">
+                                            <span>—/{cap}</span>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        
+                        <div className="flex flex-wrap items-center gap-4 mt-3 px-3 py-2 bg-slate-55 border border-slate-200/60 rounded-xl">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Légende :</span>
+                          <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-md shadow-3xs border border-green-200" style={{backgroundColor:'#86efac'}}></span><span className="text-[10px] font-semibold text-slate-600">Disponible (Pastel Vert)</span></span>
+                          <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-md shadow-3xs border border-amber-200" style={{backgroundColor:'#fde68a'}}></span><span className="text-[10px] font-semibold text-slate-600">Faible (Pastel Jaune)</span></span>
+                          <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-md shadow-3xs border border-rose-200" style={{backgroundColor:'#fca5a5'}}></span><span className="text-[10px] font-semibold text-slate-600">STOP / Complet (Pastel Rouge)</span></span>
+                          <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-md shadow-3xs border border-slate-200 bg-slate-100"></span><span className="text-[10px] font-semibold text-slate-600">Inconnu / N/A</span></span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </motion.div>

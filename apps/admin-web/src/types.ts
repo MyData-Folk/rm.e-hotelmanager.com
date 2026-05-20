@@ -43,6 +43,7 @@ export interface HotelDetailed {
   name: string;
   location: string;
   rooms: string[];
+  roomCapacity?: { [roomType: string]: number };
   partners: { [partnerName: string]: PartnerConfig };
   rules: PlanRule[];
   rates: Rate[];
