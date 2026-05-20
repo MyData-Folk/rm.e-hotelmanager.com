@@ -1,133 +1,81 @@
-# ============================================================
-#  RM e-HotelManager — Production Stack
-#  Requires an external Traefik reverse proxy network.
-#
-#  Usage:
-#    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-#
-#  Prerequisites:
-#    docker network create traefik-public
-#    (Traefik must already be running on that network)
-# ============================================================
 services:
-
-  # ──────────────────────────────────────────────────────────
-  # PostgreSQL 17 — Production (no public port exposure)
-  # ──────────────────────────────────────────────────────────
-  hotel-db:
+  hotel-rm-backend:
+    build:
+      context: ./backend
     environment:
-      POSTGRES_DB:       ${POSTGRES_DB:-hoteldb}
-      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports: []                          # override: remove 5432 host binding
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-hoteldb}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  # ──────────────────────────────────────────────────────────
-  # Express + TypeScript API Backend
-  # Domain: api.hotelmanager.fr
-  # ──────────────────────────────────────────────────────────
-  backend:
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL}  # Définie dans Coolify
       ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENV:  production
+      ENV: production
       PORT: "8000"
-      USER_WEB_ORIGIN:  https://hotel.hotelmanager.fr
-      ADMIN_WEB_ORIGIN: https://admin.hotelmanager.fr
+      USER_WEB_ORIGIN: https://rm.e-hotelmanager.com
+      ADMIN_WEB_ORIGIN: https://admin-rm.e-hotelmanager.com
       DEFAULT_RATE_SOURCE_MODE: ${DEFAULT_RATE_SOURCE_MODE:-hybrid}
-    ports: []                          # override: no direct host binding in prod
     expose:
       - "8000"
     networks:
       - internal
       - traefik-public
+    restart: unless-stopped
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
-      # Router
-      - "traefik.http.routers.hotel-backend.rule=Host(`api.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-backend.rule=Host(`back-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-backend.entrypoints=websecure"
       - "traefik.http.routers.hotel-backend.tls=true"
       - "traefik.http.routers.hotel-backend.tls.certresolver=letsencrypt"
-      # HTTP → HTTPS redirect
-      - "traefik.http.routers.hotel-backend-http.rule=Host(`api.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-backend-http.rule=Host(`back-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-backend-http.entrypoints=web"
       - "traefik.http.routers.hotel-backend-http.middlewares=redirect-to-https"
-      # Service
       - "traefik.http.services.hotel-backend.loadbalancer.server.port=8000"
-      # Shared middleware
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
-  # ──────────────────────────────────────────────────────────
-  # Admin Web UI
-  # Domain: admin.hotelmanager.fr
-  # ──────────────────────────────────────────────────────────
-  admin-web:
+  hotel-rm-admin-web:
     build:
+      context: ./apps/admin-web
       args:
-        VITE_API_URL: https://api.hotelmanager.fr
-    ports: []                          # override: no direct host binding in prod
+        VITE_API_URL: https://back-rm.e-hotelmanager.com
     expose:
       - "8080"
     networks:
       - internal
       - traefik-public
+    restart: unless-stopped
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
-      # Router
-      - "traefik.http.routers.hotel-admin.rule=Host(`admin.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-admin.rule=Host(`admin-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-admin.entrypoints=websecure"
       - "traefik.http.routers.hotel-admin.tls=true"
       - "traefik.http.routers.hotel-admin.tls.certresolver=letsencrypt"
-      # HTTP → HTTPS redirect
-      - "traefik.http.routers.hotel-admin-http.rule=Host(`admin.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-admin-http.rule=Host(`admin-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-admin-http.entrypoints=web"
       - "traefik.http.routers.hotel-admin-http.middlewares=redirect-to-https"
-      # Service
       - "traefik.http.services.hotel-admin.loadbalancer.server.port=8080"
 
-  # ──────────────────────────────────────────────────────────
-  # User Web UI
-  # Domain: hotel.hotelmanager.fr
-  # ──────────────────────────────────────────────────────────
-  user-web:
+  hotel-rm-user-web:
     build:
+      context: ./apps/user-web
       args:
-        VITE_API_URL: https://api.hotelmanager.fr
-    ports: []                          # override: no direct host binding in prod
+        VITE_API_URL: https://back-rm.e-hotelmanager.com
     expose:
       - "8080"
     networks:
       - internal
       - traefik-public
+    restart: unless-stopped
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
-      # Router
-      - "traefik.http.routers.hotel-user.rule=Host(`hotel.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-user.rule=Host(`rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-user.entrypoints=websecure"
       - "traefik.http.routers.hotel-user.tls=true"
       - "traefik.http.routers.hotel-user.tls.certresolver=letsencrypt"
-      # HTTP → HTTPS redirect
-      - "traefik.http.routers.hotel-user-http.rule=Host(`hotel.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-user-http.rule=Host(`rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-user-http.entrypoints=web"
       - "traefik.http.routers.hotel-user-http.middlewares=redirect-to-https"
-      # Service
       - "traefik.http.services.hotel-user.loadbalancer.server.port=8080"
 
-# ──────────────────────────────────────────────────────────
-# Networks
-# ──────────────────────────────────────────────────────────
 networks:
   internal:
     driver: bridge
   traefik-public:
-    external: true         # must exist before deploy: docker network create traefik-public
+    external: true
