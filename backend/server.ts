@@ -360,6 +360,34 @@ async function deleteHotelFromDb(id: string) {
   }
 }
 
+let inMemoryLogs: any[] = [];
+
+async function logToDb(level: string, category: string, message: string, details?: any) {
+  const timestamp = new Date();
+  const logEntry = {
+    id: inMemoryLogs.length + 1,
+    timestamp,
+    level,
+    category,
+    message,
+    details: details || null
+  };
+  
+  inMemoryLogs.unshift(logEntry);
+  if (inMemoryLogs.length > 500) {
+    inMemoryLogs.pop();
+  }
+
+  try {
+    await pool.query(`
+      INSERT INTO api_logs (level, category, message, details)
+      VALUES ($1, $2, $3, $4)
+    `, [level, category, message, details ? JSON.stringify(details) : null]);
+  } catch (err) {
+    // Fail silently (in-memory logger active)
+  }
+}
+
 async function initDb() {
   try {
     await pool.query(`
@@ -368,7 +396,18 @@ async function initDb() {
         data JSONB NOT NULL
       )
     `);
-    console.log("PostgreSQL table 'hotels' verified or created.");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS api_logs (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        level VARCHAR(10) NOT NULL,
+        category VARCHAR(50) NOT NULL,
+        message TEXT NOT NULL,
+        details JSONB
+      )
+    `);
+    console.log("PostgreSQL tables verified or created.");
+    await logToDb("INFO", "DATABASE", "Serveur démarré et base de données initialisée.");
     await loadDatabase();
   } catch (err) {
     console.error("Failed to initialize database:", err);
@@ -413,6 +452,17 @@ function bootWithSeedData() {
           data JSONB NOT NULL
         )
       `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS api_logs (
+          id SERIAL PRIMARY KEY,
+          timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          level VARCHAR(10) NOT NULL,
+          category VARCHAR(50) NOT NULL,
+          message TEXT NOT NULL,
+          details JSONB
+        )
+      `);
+      await logToDb("INFO", "DATABASE", "Connexion PostgreSQL établie en arrière-plan.");
       await loadDatabase();
     } catch {
       // still not reachable, keep trying silently
@@ -480,18 +530,30 @@ function calculateHotelRates(hotel: Hotel, datesToRecalculate?: string[]): Rate[
     rateLookupMap.set(`${r.roomType}|${r.planCode}|${r.date}`, r);
   });
 
+  // Optimize: group rates by roomType + date to avoid scanning the entire map on every iteration
+  const ratesByRoomAndDate = new Map<string, Rate[]>();
+  hotel.rates.forEach(r => {
+    const key = `${r.roomType}|${r.date}`;
+    if (!ratesByRoomAndDate.has(key)) {
+      ratesByRoomAndDate.set(key, []);
+    }
+    ratesByRoomAndDate.get(key)!.push(r);
+  });
+
   const roomTypes = hotel.rooms;
 
   dates.forEach(date => {
     roomTypes.forEach(roomType => {
+      const roomDateKey = `${roomType}|${date}`;
+      const candidates = ratesByRoomAndDate.get(roomDateKey) || [];
+
       rules.forEach(rule => {
         let basePlanCode = `${rule.baseSource}-RO-FLEX`;
         let baseRateObj = rateLookupMap.get(`${roomType}|${basePlanCode}|${date}`);
         
         if (!baseRateObj) {
-          const matchPrefix = [...rateLookupMap.values()].find(r => 
-            r.roomType === roomType &&
-            r.date === date &&
+          // Optimize: find matching prefix in candidates (only rates for this room + date) instead of all rates
+          const matchPrefix = candidates.find(r => 
             r.planCode.startsWith(rule.baseSource) &&
             r.planCode.includes("RO") &&
             r.planCode.includes("FLEX")
@@ -541,6 +603,7 @@ function calculateHotelRates(hotel: Hotel, datesToRecalculate?: string[]): Rate[
           };
           hotel.rates.push(newRate);
           rateLookupMap.set(key, newRate);
+          candidates.push(newRate); // add to candidates as well in case subsequent rules need it
         }
       });
     });
@@ -933,7 +996,15 @@ app.get("/rates/grid", (req, res) => {
 
   // Filter and output rates
   // We need derived rates as well! So let's recalculate derived rates to make sure the rates array is populated!
-  calculateHotelRates(hotel);
+  const datesInRange = Array.from(new Set(
+    hotel.rates
+      .map(r => r.date)
+      .filter(d => {
+        const iso = toISO(d);
+        return iso >= start && iso <= end;
+      })
+  ));
+  calculateHotelRates(hotel, datesInRange);
 
   const filteredRates = hotel.rates.filter(r => {
     const rIsoDate = toISO(r.date);
@@ -1343,6 +1414,12 @@ app.post("/api/hotels/:id/upload-rates", async (req, res) => {
     calculateHotelRates(hotel, datesFound);
     await saveHotelToDb(hotel);
 
+    await logToDb("INFO", "UPLOAD", `Importation Excel réussie pour l'hôtel ${hotel.name} (${parsedRatesList.length} tarifs, dates: ${datesFound.join(", ")})`, {
+      fileName: fileName || "Import",
+      tarifsCount: parsedRatesList.length,
+      dates: datesFound
+    });
+
     res.json({
       status: "success",
       message: `Tarifs importés avec succès. ${parsedRatesList.length} cellules de prix chargées pour ${datesFound.length} dates différentes (${datesFound.join(", ")}).`,
@@ -1353,6 +1430,10 @@ app.post("/api/hotels/:id/upload-rates", async (req, res) => {
 
   } catch (err: any) {
     console.error("Error occurred while parsing rate upload:", err);
+    await logToDb("ERROR", "UPLOAD", `Erreur d'importation Excel pour l'hôtel ${hotel.id} : ${err.message}`, {
+      stack: err.stack,
+      fileName
+    });
     res.status(500).json({ error: `Échec du traitement du fichier: ${err.message}` });
   }
 });
@@ -1595,6 +1676,12 @@ app.post("/api/hotels/:id/rates/update-reference", async (req, res) => {
   calculateHotelRates(hotel, datesToRecalculate);
   await saveHotelToDb(hotel);
 
+  await logToDb("INFO", "RATE_UPDATE", `Mise à jour des tarifs/dispos pour ${hotel.name} (${datesToRecalculate.length} dates : ${datesToRecalculate.join(", ")})`, {
+    hotelId: hotel.id,
+    dates: datesToRecalculate,
+    updatesCount: datesToRecalculate.length
+  });
+
   res.json({
     status: "success",
     message: `Référence mise à jour. Les autres plans pour la date ou les dates (${datesToRecalculate.join(", ")}) ont été recalculés séquentiellement en arrière-plan.`,
@@ -1654,6 +1741,65 @@ app.post("/api/hotels/:id/simulate", (req, res) => {
       days: sim.dayByDayCalculations
     }
   });
+});
+
+// GET SYSTEM LOGS
+app.get("/api/logs", async (req, res) => {
+  const levelFilter = req.query.level as string;
+  const categoryFilter = req.query.category as string;
+  const searchFilter = req.query.search as string;
+
+  try {
+    let queryText = "SELECT * FROM api_logs WHERE 1=1";
+    const queryParams: any[] = [];
+
+    if (levelFilter && levelFilter !== "ALL") {
+      queryParams.push(levelFilter);
+      queryText += ` AND level = $${queryParams.length}`;
+    }
+    if (categoryFilter && categoryFilter !== "ALL") {
+      queryParams.push(categoryFilter);
+      queryText += ` AND category = $${queryParams.length}`;
+    }
+    if (searchFilter) {
+      queryParams.push(`%${searchFilter}%`);
+      queryText += ` AND (message ILIKE $${queryParams.length} OR CAST(details AS TEXT) ILIKE $${queryParams.length})`;
+    }
+
+    queryText += " ORDER BY timestamp DESC LIMIT 200";
+
+    const dbResult = await pool.query(queryText, queryParams);
+    return res.json(dbResult.rows);
+  } catch (err) {
+    let filtered = [...inMemoryLogs];
+    if (levelFilter && levelFilter !== "ALL") {
+      filtered = filtered.filter(l => l.level === levelFilter);
+    }
+    if (categoryFilter && categoryFilter !== "ALL") {
+      filtered = filtered.filter(l => l.category === categoryFilter);
+    }
+    if (searchFilter) {
+      const searchLower = searchFilter.toLowerCase();
+      filtered = filtered.filter(l => 
+        l.message.toLowerCase().includes(searchLower) ||
+        (l.details && JSON.stringify(l.details).toLowerCase().includes(searchLower))
+      );
+    }
+    return res.json(filtered.slice(0, 200));
+  }
+});
+
+// CLEAR SYSTEM LOGS
+app.post("/api/logs/clear", async (req, res) => {
+  inMemoryLogs = [];
+  try {
+    await pool.query("DELETE FROM api_logs");
+    await logToDb("INFO", "DATABASE", "Historique des logs système vidé par l'administrateur.");
+    res.json({ status: "success", message: "Logs effacés avec succès dans la base de données." });
+  } catch (err: any) {
+    await logToDb("INFO", "DATABASE", "Historique des logs effacé en mémoire locale.");
+    res.json({ status: "success", message: "Logs effacés en mémoire locale (échec de suppression DB)." });
+  }
 });
 
 async function startServer() {
