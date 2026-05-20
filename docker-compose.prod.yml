@@ -6,7 +6,7 @@
 #    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 #  Prerequisites:
-#    docker network create traefik-public
+#    docker network create coolify
 #    (Traefik must already be running on that network)
 # ============================================================
 
@@ -31,11 +31,11 @@ services:
       - "8000"
     networks:
       - internal
-      - traefik-public
+      - coolify
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
+      - "traefik.docker.network=coolify"
       # Router HTTPS
       - "traefik.http.routers.hotel-backend.rule=Host(`back-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-backend.entrypoints=websecure"
@@ -60,11 +60,11 @@ services:
       - "8080"
     networks:
       - internal
-      - traefik-public
+      - coolify
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
+      - "traefik.docker.network=coolify"
       # Router HTTPS
       - "traefik.http.routers.hotel-admin.rule=Host(`admin-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-admin.entrypoints=websecure"
@@ -89,11 +89,11 @@ services:
       - "8080"
     networks:
       - internal
-      - traefik-public
+      - coolify
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
+      - "traefik.docker.network=coolify"
       # Router HTTPS
       - "traefik.http.routers.hotel-user.rule=Host(`rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-user.entrypoints=websecure"
@@ -122,5 +122,5 @@ services:
 networks:
   internal:
     driver: bridge
-  traefik-public:
+  coolify:
     external: true
