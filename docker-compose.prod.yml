@@ -24,7 +24,7 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY is required}
       ENV: production
       PORT: "8000"
-      USER_WEB_ORIGIN: https://rm.e-hotelmanager.com
+      USER_WEB_ORIGIN: https://rm-front.e-hotelmanager.com
       ADMIN_WEB_ORIGIN: https://admin-rm.e-hotelmanager.com
       DEFAULT_RATE_SOURCE_MODE: ${DEFAULT_RATE_SOURCE_MODE:-hybrid}
     expose:
