@@ -1,31 +1,32 @@
 # ============================================================
 #  RM e-HotelManager — Production Stack
-#  Requires an external Traefik reverse proxy network.
+#  Deployed via Coolify (Traefik is managed externally by Coolify).
 #
 #  Usage:
 #    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
 #  Prerequisites:
-#    docker network create coolify
-#    (Traefik must already be running on that network)
+#    The "coolify" Docker network must already exist (managed by Coolify).
+#    Coolify's built-in Traefik handles SSL and HTTP->HTTPS redirects.
 # ============================================================
 
 services:
 
   # ──────────────────────────────────────────────────────────
   # Express + TypeScript API Backend
-  # Domain: api.hotelmanager.fr
+  # Domains: back-rm.e-hotelmanager.com | api.hotelmanager.fr
   # ──────────────────────────────────────────────────────────
   hotel-rm-backend:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY is required}
+      # DATABASE_URL is optional — backend starts in-memory if not set
+      DATABASE_URL: ${DATABASE_URL:-}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key}
       ENV: production
       PORT: "8000"
-      USER_WEB_ORIGIN: https://hotel.hotelmanager.fr
-      ADMIN_WEB_ORIGIN: https://admin.hotelmanager.fr
+      USER_WEB_ORIGIN: https://rm-front.e-hotelmanager.com
+      ADMIN_WEB_ORIGIN: https://admin-rm.e-hotelmanager.com
       DEFAULT_RATE_SOURCE_MODE: ${DEFAULT_RATE_SOURCE_MODE:-hybrid}
     expose:
       - "8000"
@@ -36,26 +37,21 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=coolify"
-      # Router HTTPS
-      - "traefik.http.routers.hotel-backend.rule=Host(`api.hotelmanager.fr`) || Host(`back-rm.e-hotelmanager.com`) || Host(`api-rm.e-hotelmanager.com`)"
-      - "traefik.http.routers.hotel-backend.entrypoints=websecure"
+      - "traefik.http.routers.hotel-backend.rule=Host(`back-rm.e-hotelmanager.com`) || Host(`api-rm.e-hotelmanager.com`) || Host(`api.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-backend.entrypoints=https"
       - "traefik.http.routers.hotel-backend.tls=true"
       - "traefik.http.routers.hotel-backend.tls.certresolver=letsencrypt"
-      # Router HTTP → HTTPS redirect
-      - "traefik.http.routers.hotel-backend-http.rule=Host(`api.hotelmanager.fr`) || Host(`back-rm.e-hotelmanager.com`) || Host(`api-rm.e-hotelmanager.com`)"
-      - "traefik.http.routers.hotel-backend-http.entrypoints=web"
-      - "traefik.http.routers.hotel-backend-http.middlewares=redirect-to-https"
       - "traefik.http.services.hotel-backend.loadbalancer.server.port=8000"
 
   # ──────────────────────────────────────────────────────────
   # Admin Web UI
-  # Domain: admin.hotelmanager.fr
+  # Domains: admin-rm.e-hotelmanager.com | admin.hotelmanager.fr
   # ──────────────────────────────────────────────────────────
   hotel-rm-admin-web:
     build:
       context: ./apps/admin-web
       args:
-        VITE_API_URL: https://api.hotelmanager.fr
+        VITE_API_URL: https://back-rm.e-hotelmanager.com
     expose:
       - "8080"
     networks:
@@ -65,26 +61,21 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=coolify"
-      # Router HTTPS
-      - "traefik.http.routers.hotel-admin.rule=Host(`admin.hotelmanager.fr`) || Host(`admin-rm.e-hotelmanager.com`)"
-      - "traefik.http.routers.hotel-admin.entrypoints=websecure"
+      - "traefik.http.routers.hotel-admin.rule=Host(`admin-rm.e-hotelmanager.com`) || Host(`admin.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-admin.entrypoints=https"
       - "traefik.http.routers.hotel-admin.tls=true"
       - "traefik.http.routers.hotel-admin.tls.certresolver=letsencrypt"
-      # Router HTTP → HTTPS redirect
-      - "traefik.http.routers.hotel-admin-http.rule=Host(`admin.hotelmanager.fr`) || Host(`admin-rm.e-hotelmanager.com`)"
-      - "traefik.http.routers.hotel-admin-http.entrypoints=web"
-      - "traefik.http.routers.hotel-admin-http.middlewares=redirect-to-https"
       - "traefik.http.services.hotel-admin.loadbalancer.server.port=8080"
 
   # ──────────────────────────────────────────────────────────
   # User Web UI (Frontend)
-  # Domain: hotel.hotelmanager.fr
+  # Domains: rm-front.e-hotelmanager.com | hotel.hotelmanager.fr
   # ──────────────────────────────────────────────────────────
   hotel-rm-user-web:
     build:
       context: ./apps/user-web
       args:
-        VITE_API_URL: https://api.hotelmanager.fr
+        VITE_API_URL: https://back-rm.e-hotelmanager.com
     expose:
       - "8080"
     networks:
@@ -94,27 +85,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=coolify"
-      # Router HTTPS
-      - "traefik.http.routers.hotel-user.rule=Host(`hotel.hotelmanager.fr`) || Host(`rm.e-hotelmanager.com`) || Host(`rm-front.e-hotelmanager.com`)"
-      - "traefik.http.routers.hotel-user.entrypoints=websecure"
+      - "traefik.http.routers.hotel-user.rule=Host(`rm-front.e-hotelmanager.com`) || Host(`rm.e-hotelmanager.com`) || Host(`hotel.hotelmanager.fr`)"
+      - "traefik.http.routers.hotel-user.entrypoints=https"
       - "traefik.http.routers.hotel-user.tls=true"
       - "traefik.http.routers.hotel-user.tls.certresolver=letsencrypt"
-      # Router HTTP → HTTPS redirect
-      - "traefik.http.routers.hotel-user-http.rule=Host(`hotel.hotelmanager.fr`) || Host(`rm.e-hotelmanager.com`) || Host(`rm-front.e-hotelmanager.com`)"
-      - "traefik.http.routers.hotel-user-http.entrypoints=web"
-      - "traefik.http.routers.hotel-user-http.middlewares=redirect-to-https"
       - "traefik.http.services.hotel-user.loadbalancer.server.port=8080"
-
-  # ──────────────────────────────────────────────────────────
-  # Shared Middleware (HTTPS redirect)
-  # ──────────────────────────────────────────────────────────
-  redirect-to-https:
-    image: traefik:v3.0
-    command: |
-      traefik --configFile=/dev/null --providers.file.directory=/ --providers.file.watch=false
-    labels:
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
 
 # ──────────────────────────────────────────────────────────
 # Networks

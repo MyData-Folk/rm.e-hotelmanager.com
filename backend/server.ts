@@ -374,8 +374,52 @@ async function initDb() {
     await loadDatabase();
   } catch (err) {
     console.error("Failed to initialize database:", err);
-    throw err;
+    // Non-fatal: start with in-memory seed data and retry in background
+    bootWithSeedData();
   }
+}
+
+function bootWithSeedData() {
+  if (hotelsCache.length === 0) {
+    console.warn("[DB FALLBACK] Starting with in-memory seed data (PostgreSQL unavailable).");
+    const seedHotel: Hotel = {
+      id: "folkestone",
+      name: "Folkestone Opera",
+      location: "Paris, France",
+      rooms: [
+        "Double Classique",
+        "Double Single Use Classique",
+        "Twin Classique",
+        "Double Classique Terrasse",
+        "Double Deluxe",
+        "Twin Deluxe",
+        "Double Deluxe Terrasse",
+        "Deux Chambres Adjacentes 4 personnes"
+      ],
+      partners: parseInitialPartners(RAW_PARTNERS_JSON),
+      rules: parseInitialPlanRules(RAW_PLAN_RULES_CSV),
+      rates: parseInitialRatesCSV(RAW_RATES_CSV)
+    };
+    hotelsCache = [seedHotel];
+  }
+
+  // Retry DB connection every 15 seconds silently
+  const retryTimer = setInterval(async () => {
+    try {
+      await pool.query("SELECT 1");
+      console.log("[DB RETRY] PostgreSQL is now reachable — initializing database.");
+      clearInterval(retryTimer);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS hotels (
+          id TEXT PRIMARY KEY,
+          data JSONB NOT NULL
+        )
+      `);
+      await loadDatabase();
+    } catch {
+      // still not reachable, keep trying silently
+    }
+  }, 15000);
 }
 
 async function loadDatabase() {
@@ -1615,11 +1659,18 @@ app.post("/api/hotels/:id/simulate", (req, res) => {
 });
 
 async function startServer() {
-  await initDb();
-  
+  // Start HTTP server immediately — DB init is non-blocking
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Hotel Management Standalone API server listening on http://0.0.0.0:${PORT}`);
   });
+
+  // Attempt DB init (non-fatal — server continues even if DB is unavailable)
+  try {
+    await initDb();
+  } catch (err) {
+    console.error("[STARTUP] DB init failed, running in-memory mode:", err);
+    bootWithSeedData();
+  }
 }
 
 startServer();
