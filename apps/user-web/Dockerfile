@@ -8,7 +8,7 @@ ENV VITE_API_URL=$VITE_API_URL
 COPY package*.json ./
 RUN npm ci
 
-COPY index.html ./
+COPY index.html vite.config.js ./
 COPY src ./src
 RUN npm run build
 
