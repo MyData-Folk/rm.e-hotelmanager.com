@@ -1,0 +1,6 @@
+{
+  "name": "Audit rm.e-hotelmanager",
+  "description": "Plateforme d'audit, de simulation de rendement hôtelier en temps réel, de cascading de règles tarifaires et d'importation de fichiers Excel PMS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
