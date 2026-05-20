@@ -51,9 +51,10 @@ import {
 import { ddmmyyyyToYyyymmdd, yyyymmddToDdmmyyyy } from './utils';
 import { hotelApi, API_URL } from './services/api';
 import TechnicalTab from './components/TechnicalTab';
+import LogsTab from './components/LogsTab';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'simulation' | 'rates-grid' | 'config' | 'upload' | 'technical'>('simulation');
+  const [activeTab, setActiveTab] = useState<'simulation' | 'rates-grid' | 'config' | 'upload' | 'technical' | 'logs'>('simulation');
   
   // App-wide Hotel List and active selection
   const [hotels, setHotels] = useState<HotelSummary[]>([]);
@@ -856,7 +857,7 @@ export default function App() {
               <Upload className="h-3.5 w-3.5 text-purple-500" />
               Importateur Excel / CSV
             </button>
-            <button
+             <button
               onClick={() => setActiveTab('technical')}
               className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold transition-all duration-200 rounded-lg cursor-pointer ${
                 activeTab === 'technical'
@@ -866,6 +867,17 @@ export default function App() {
             >
               <Database className="h-3.5 w-3.5 text-slate-500" />
               Rapport d'Audit & SQL Schema
+            </button>
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold transition-all duration-200 rounded-lg cursor-pointer ${
+                activeTab === 'logs'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Terminal className="h-3.5 w-3.5 text-rose-500" />
+              Logs Système
             </button>
           </div>
 
@@ -2342,6 +2354,11 @@ Double Classique;OTA-RO-FLEX - OTA RO FLEX;Price (EUR);161,00;188,00`}
                 TAB 5: DEVELOPER & TECHNICAL AUDIT SUB-REPORT 
                 ========================================== */}
             {activeTab === 'technical' && <TechnicalTab />}
+
+            {/* ==========================================
+                TAB 6: SYSTEM AUDIT & LOGS
+                ========================================== */}
+            {activeTab === 'logs' && <LogsTab />}
 
           </AnimatePresence>
         )}
