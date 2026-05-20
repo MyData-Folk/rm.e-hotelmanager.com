@@ -49,7 +49,7 @@ import {
   SimulationResult 
 } from './types';
 import { ddmmyyyyToYyyymmdd, yyyymmddToDdmmyyyy } from './utils';
-import { hotelApi } from './services/api';
+import { hotelApi, API_URL } from './services/api';
 import TechnicalTab from './components/TechnicalTab';
 
 export default function App() {
@@ -288,7 +288,7 @@ export default function App() {
     };
 
     try {
-      const res = await fetch(`/api/hotels/${activeHotelId}/rates/update-reference`, {
+      const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/rates/update-reference`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -323,7 +323,7 @@ export default function App() {
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      const res = await fetch(`/api/hotels/${activeHotelId}/rates/clear`, {
+      const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/rates/clear`, {
         method: 'POST'
       });
       if (!res.ok) {
@@ -369,7 +369,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch(`/api/hotels/${activeHotelId}/rates/update-reference`, {
+      const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/rates/update-reference`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -454,7 +454,7 @@ export default function App() {
     setSuccessMessage(null);
 
     try {
-      const res = await fetch(`/api/hotels/${activeHotelId}/config`, {
+      const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/config`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -490,7 +490,7 @@ export default function App() {
     const datesOverride = customDatesInput.split(",").map(d => d.trim()).filter(Boolean);
 
     try {
-      const res = await fetch(`/api/hotels/${activeHotelId}/upload-rates`, {
+      const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/upload-rates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -554,7 +554,7 @@ export default function App() {
         // Send binary rates to database
         const datesOverride = customDatesInput.split(",").map(d => d.trim()).filter(Boolean);
 
-        const res = await fetch(`/api/hotels/${activeHotelId}/upload-rates`, {
+        const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/upload-rates`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -597,7 +597,7 @@ export default function App() {
         const rawText = evt.target?.result as string;
         const parsed = JSON.parse(rawText);
 
-        const res = await fetch(`/api/hotels/${activeHotelId}/upload-partners`, {
+        const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/upload-partners`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -645,7 +645,7 @@ export default function App() {
           bodyObj = { rulesData: parsed };
         }
 
-        const res = await fetch(`/api/hotels/${activeHotelId}/upload-rules`, {
+        const res = await fetch(`${API_URL}/api/hotels/${activeHotelId}/upload-rules`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

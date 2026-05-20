@@ -22,7 +22,7 @@ const getApiUrl = () => {
   return '';
 };
 
-const API_URL = getApiUrl();
+export const API_URL = getApiUrl();
 
 export const hotelApi = {
   /**
