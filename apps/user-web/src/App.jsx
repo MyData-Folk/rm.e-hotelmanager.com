@@ -151,6 +151,7 @@ export default function App() {
   const [rates, setRates] = useState([]);
   const [grid, setGrid] = useState(null);
   const [simulation, setSimulation] = useState(null);
+  const [activeHotelDetails, setActiveHotelDetails] = useState(null);
   
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -171,20 +172,22 @@ export default function App() {
 
   const availableRooms = useMemo(
     () => unique([
+      ...(activeHotelDetails?.rooms || []),
       ...availability.map((item) => item.room_name),
       ...rates.map((item) => item.room_name),
       filters.roomName,
     ]),
-    [availability, rates, filters.roomName],
+    [activeHotelDetails, availability, rates, filters.roomName],
   );
 
   const availablePlans = useMemo(
     () => unique([
+      ...(activeHotelDetails?.rules || []).map(r => r.planCode),
       ...(partner?.plan_codes || []),
       ...rates.map((item) => item.plan_code),
       filters.planCode,
     ]),
-    [partner, rates, filters.planCode],
+    [activeHotelDetails, partner, rates, filters.planCode],
   );
 
   const dashboardSummary = useMemo(() => {
@@ -443,17 +446,21 @@ export default function App() {
     initMetadata();
   }, []);
 
-  // Effect: When active hotel selection updates, fetch partners & refresh grid data
+  // Effect: When active hotel selection updates, fetch details, partners & refresh grid data
   useEffect(() => {
     if (!filters.hotelId) return;
     async function loadHotelDetails() {
       setLoading(true);
       try {
-        const partnersPayload = await apiRequest(`/partners?hotel_id=${encodeURIComponent(filters.hotelId)}`);
+        const [partnersPayload, hotelDetailsPayload] = await Promise.all([
+          apiRequest(`/partners?hotel_id=${encodeURIComponent(filters.hotelId)}`),
+          apiRequest(`/api/hotels/${encodeURIComponent(filters.hotelId)}`)
+        ]);
         setPartners(partnersPayload);
+        setActiveHotelDetails(hotelDetailsPayload);
         await refreshData(filters);
       } catch (err) {
-        setMessage(`Échec de chargement des partenaires : ${err.message}`);
+        setMessage(`Échec de chargement des détails de l'hôtel : ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -783,6 +790,34 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-wrap items-end gap-4">
+                  {/* Select Room */}
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold text-slate-400">Catégorie de Chambre</label>
+                    <select
+                      value={filters.roomName}
+                      onChange={(e) => updateFilter('roomName', e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer w-64"
+                    >
+                      {availableRooms.map((room) => (
+                        <option key={room} value={room}>{room}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Select Plan */}
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold text-slate-400">Plan Tarifaire</label>
+                    <select
+                      value={filters.planCode}
+                      onChange={(e) => updateFilter('planCode', e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer w-64"
+                    >
+                      {availablePlans.map((plan) => (
+                        <option key={plan} value={plan}>{plan}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Select Partner */}
                   <div className="space-y-1">
                     <label className="block text-[10px] uppercase font-bold text-slate-400">Partenaire Cible</label>
