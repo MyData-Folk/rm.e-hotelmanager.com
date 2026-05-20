@@ -30,7 +30,7 @@ services:
 
   hotel-rm-admin-web:
     build:
-      context: .  # ← Changement important
+      context: .  # ← Changé : utilise la racine
       dockerfile: ./apps/admin-web/Dockerfile  # ← Ajouté
       args:
         VITE_API_URL: https://back-rm.e-hotelmanager.com
@@ -54,7 +54,7 @@ services:
 
   hotel-rm-user-web:
     build:
-      context: .  # ← Changement important
+      context: .  # ← Changé : utilise la racine
       dockerfile: ./apps/user-web/Dockerfile  # ← Ajouté
       args:
         VITE_API_URL: https://back-rm.e-hotelmanager.com
