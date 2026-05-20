@@ -105,54 +105,52 @@ function tryParseToDDMMYYYY(val: any): string | null {
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8000;
 
-const ALLOWED_ORIGINS = [
-  // .com production domains
-  "https://rm-front.e-hotelmanager.com",
-  "https://rm.e-hotelmanager.com",
-  "https://admin-rm.e-hotelmanager.com",
-  "https://back-rm.e-hotelmanager.com",
-  "https://api-rm.e-hotelmanager.com",
-  // .fr production domains
-  "https://hotel.hotelmanager.fr",
-  "https://admin.hotelmanager.fr",
-  "https://api.hotelmanager.fr",
-  // local development
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://localhost:8080",
-  "http://localhost:3000",
+const ALLOWED_ORIGIN_HOSTS = [
+  "rm-front.e-hotelmanager.com",
+  "rm.e-hotelmanager.com",
+  "admin-rm.e-hotelmanager.com",
+  "back-rm.e-hotelmanager.com",
+  "api-rm.e-hotelmanager.com",
+  "hotel.hotelmanager.fr",
+  "admin.hotelmanager.fr",
+  "api.hotelmanager.fr",
+  "localhost",
+  "127.0.0.1"
 ];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. curl, Postman, server-to-server)
-      if (!origin) return callback(null, true);
-      if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-      // In development, allow everything
-      if (process.env.ENV !== "production") return callback(null, true);
-      callback(new Error(`CORS: Origin ${origin} not allowed`));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Api-Key", "Accept"],
-    optionsSuccessStatus: 200, // Some legacy browsers choke on 204
-  })
-);
-
-// Respond OK to all OPTIONS preflight requests globally
-app.options("*", cors({
-  origin: (origin, callback) => {
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (e.g. curl, Postman, server-to-server)
     if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    if (process.env.ENV !== "production") return callback(null, true);
-    callback(new Error(`CORS: Origin ${origin} not allowed`));
+    
+    try {
+      const url = new URL(origin);
+      const hostname = url.hostname;
+      
+      const isAllowed = 
+        ALLOWED_ORIGIN_HOSTS.includes(hostname) || 
+        hostname.endsWith("e-hotelmanager.com") || 
+        hostname.endsWith("hotelmanager.fr") ||
+        process.env.ENV !== "production";
+      
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        console.warn(`CORS: Origin ${origin} (hostname ${hostname}) not allowed`);
+        callback(null, false);
+      }
+    } catch (err) {
+      callback(null, false);
+    }
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Api-Key", "Accept"],
   optionsSuccessStatus: 200,
-}));
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
