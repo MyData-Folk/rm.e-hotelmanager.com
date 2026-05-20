@@ -1,10 +1,27 @@
+# ============================================================
+#  RM e-HotelManager — Production Stack
+#  Requires an external Traefik reverse proxy network.
+#
+#  Usage:
+#    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+#  Prerequisites:
+#    docker network create traefik-public
+#    (Traefik must already be running on that network)
+# ============================================================
+
 services:
+
+  # ──────────────────────────────────────────────────────────
+  # Express + TypeScript API Backend
+  # Domain: back-rm.e-hotelmanager.com
+  # ──────────────────────────────────────────────────────────
   hotel-rm-backend:
     build:
       context: ./backend
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY is required}
       ENV: production
       PORT: "8000"
       USER_WEB_ORIGIN: https://rm.e-hotelmanager.com
@@ -19,19 +36,24 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
+      # Router HTTPS
       - "traefik.http.routers.hotel-backend.rule=Host(`back-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-backend.entrypoints=websecure"
       - "traefik.http.routers.hotel-backend.tls=true"
       - "traefik.http.routers.hotel-backend.tls.certresolver=letsencrypt"
+      # Router HTTP → HTTPS redirect
       - "traefik.http.routers.hotel-backend-http.rule=Host(`back-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-backend-http.entrypoints=web"
       - "traefik.http.routers.hotel-backend-http.middlewares=redirect-to-https"
       - "traefik.http.services.hotel-backend.loadbalancer.server.port=8000"
 
+  # ──────────────────────────────────────────────────────────
+  # Admin Web UI
+  # Domain: admin-rm.e-hotelmanager.com
+  # ──────────────────────────────────────────────────────────
   hotel-rm-admin-web:
     build:
-      context: .  # ← Changé : utilise la racine
-      dockerfile: ./apps/admin-web/Dockerfile  # ← Ajouté
+      context: ./apps/admin-web
       args:
         VITE_API_URL: https://back-rm.e-hotelmanager.com
     expose:
@@ -43,19 +65,24 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
+      # Router HTTPS
       - "traefik.http.routers.hotel-admin.rule=Host(`admin-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-admin.entrypoints=websecure"
       - "traefik.http.routers.hotel-admin.tls=true"
       - "traefik.http.routers.hotel-admin.tls.certresolver=letsencrypt"
+      # Router HTTP → HTTPS redirect
       - "traefik.http.routers.hotel-admin-http.rule=Host(`admin-rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-admin-http.entrypoints=web"
       - "traefik.http.routers.hotel-admin-http.middlewares=redirect-to-https"
       - "traefik.http.services.hotel-admin.loadbalancer.server.port=8080"
 
+  # ──────────────────────────────────────────────────────────
+  # User Web UI (Frontend)
+  # Domain: rm.e-hotelmanager.com
+  # ──────────────────────────────────────────────────────────
   hotel-rm-user-web:
     build:
-      context: .  # ← Changé : utilise la racine
-      dockerfile: ./apps/user-web/Dockerfile  # ← Ajouté
+      context: ./apps/user-web
       args:
         VITE_API_URL: https://back-rm.e-hotelmanager.com
     expose:
@@ -67,15 +94,31 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
+      # Router HTTPS
       - "traefik.http.routers.hotel-user.rule=Host(`rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-user.entrypoints=websecure"
       - "traefik.http.routers.hotel-user.tls=true"
       - "traefik.http.routers.hotel-user.tls.certresolver=letsencrypt"
+      # Router HTTP → HTTPS redirect
       - "traefik.http.routers.hotel-user-http.rule=Host(`rm.e-hotelmanager.com`)"
       - "traefik.http.routers.hotel-user-http.entrypoints=web"
       - "traefik.http.routers.hotel-user-http.middlewares=redirect-to-https"
       - "traefik.http.services.hotel-user.loadbalancer.server.port=8080"
 
+  # ──────────────────────────────────────────────────────────
+  # Shared Middleware (HTTPS redirect)
+  # ──────────────────────────────────────────────────────────
+  redirect-to-https:
+    image: traefik:v3.0
+    command: |
+      traefik --configFile=/dev/null --providers.file.directory=/ --providers.file.watch=false
+    labels:
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+
+# ──────────────────────────────────────────────────────────
+# Networks
+# ──────────────────────────────────────────────────────────
 networks:
   internal:
     driver: bridge
