@@ -1,6 +1,28 @@
 import { HotelSummary, HotelDetailed, SimulationResult, PartnerConfig } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const getApiUrl = () => {
+  const hostname = window.location.hostname;
+  if (
+    hostname.includes('admin-rm.e-hotelmanager.com') ||
+    hostname.includes('rm-front.e-hotelmanager.com') ||
+    hostname.includes('back-rm.e-hotelmanager.com') ||
+    hostname.includes('api-rm.e-hotelmanager.com')
+  ) {
+    return 'https://back-rm.e-hotelmanager.com';
+  }
+  if (
+    hostname.includes('admin.hotelmanager.fr') ||
+    hostname.includes('hotel.hotelmanager.fr') ||
+    hostname.includes('api.hotelmanager.fr')
+  ) {
+    return 'https://api.hotelmanager.fr';
+  }
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl !== 'undefined') return envUrl;
+  return '';
+};
+
+const API_URL = getApiUrl();
 
 export const hotelApi = {
   /**
