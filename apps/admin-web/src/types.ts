@@ -1,3 +1,13 @@
+import { 
+  RateStep, 
+  PlanRule, 
+  PartnerConfig, 
+  Rate, 
+  HotelSummary, 
+  HotelDetailed, 
+  SimulationResult 
+} from './types';
+
 export interface RateStep {
   operation: 'multiply' | 'add' | 'subtract';
   value: number;
@@ -31,22 +41,27 @@ export interface HotelSummary {
   id: string;
   name: string;
   location: string;
-  roomsCount: number;
-  partnersCount: number;
-  rulesCount: number;
-  ratesCount: number;
-  datesRange: string[];
 }
 
-export interface HotelDetailed {
-  id: string;
-  name: string;
-  location: string;
+export interface HotelDetailed extends HotelSummary {
   rooms: string[];
   roomCapacity?: { [roomType: string]: number };
   partners: { [partnerName: string]: PartnerConfig };
   rules: PlanRule[];
   rates: Rate[];
+}
+
+export interface SimulationDay {
+  date: string;
+  publicPrice: number;
+  discountedPrice: number;
+  commissionCost: number;
+  netReward: number;
+  inventory: string;
+  isFromExcel: boolean;
+  basePlanUsed: string;
+  basePriceUsed: number;
+  stepsTrace: { label: string; formula: string; output: number }[];
 }
 
 export interface SimulationResult {
@@ -64,23 +79,8 @@ export interface SimulationResult {
     totalCommissionValue: number;
     totalNetYield: number;
     yieldRetentionRate: number;
-    minInventoryAvailable: string | number;
+    minInventoryAvailable: number | string;
     stopSalesActive: boolean;
   };
-  days: {
-    date: string;
-    publicPrice: number;
-    inventory: string;
-    isFromExcel?: boolean;
-    discountedPrice: number;
-    commissionCost: number;
-    netReward: number;
-    basePlanUsed: string;
-    basePriceUsed: number;
-    stepsTrace: {
-      label: string;
-      formula: string;
-      output: number;
-    }[];
-  }[];
+  days: SimulationDay[];
 }
